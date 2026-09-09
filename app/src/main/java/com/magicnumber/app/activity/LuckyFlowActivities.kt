@@ -192,12 +192,14 @@ class LuckyAnimationActivity : ComponentActivity() {
                     step = 4
                     revealReady = true
                 }
+                com.magicnumber.app.domain.magic.MagicFeedback.reveal(this@LuckyAnimationActivity)
             }
 
             LaunchedEffect(Unit) {
                 while (!revealReady) {
                     delay(380)
                     decoyNumbers = randomDecoyNumbers(comboSize)
+                    com.magicnumber.app.domain.magic.MagicFeedback.generateTick(this@LuckyAnimationActivity)
                 }
             }
 

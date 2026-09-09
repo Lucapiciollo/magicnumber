@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -285,6 +286,7 @@ class GeneratedNumbersActivity : ComponentActivity() {
             .format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy - HH:mm", java.util.Locale.ITALIAN))
 
         magicContent {
+            LaunchedEffect(Unit) { com.magicnumber.app.domain.magic.MagicFeedback.reveal(this@GeneratedNumbersActivity) }
             MagicPage("Ecco i tuoi ${numbers.size} numeri!", null, background = R.drawable.bg_number_source) {
                 NumberGrid(numbers, highlighted = true, animate = true)
                 Spacer(Modifier.height(22.dp))

@@ -1,37 +1,82 @@
 package com.magicnumber.app.domain.magic
 
 import android.content.Context
-import android.media.AudioManager
-import android.media.ToneGenerator
+import android.media.AudioAttributes
+import android.media.SoundPool
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import com.magicnumber.app.R
 
 /**
- * Centralized tap feedback (short tone + haptic tick) fired from buttons, steppers, chips and the
- * keypad. Always respects the user's live Settings toggles — no separate "is this real?" state to
- * keep in sync, each call re-reads [SettingsPreferences] directly.
+ * Centralized tap feedback (themed sound + haptic tick) fired from buttons, steppers, chips, the
+ * keypad and the "magic" generation/reveal flow. Always respects the user's live Settings toggles —
+ * no separate "is this real?" state to keep in sync, each call re-reads [SettingsPreferences]
+ * directly.
+ *
+ * Uses [SoundPool] with real bundled sound effects (res/raw) routed through [AudioAttributes.USAGE_GAME]
+ * (→ media/game volume stream) rather than [android.media.ToneGenerator] on `STREAM_SYSTEM`, which on
+ * many OEM devices (e.g. Samsung, when "touch sounds"/system volume is muted) is silent regardless of
+ * app logic.
  */
 object MagicFeedback {
-    private var toneGenerator: ToneGenerator? = null
+    private var soundPool: SoundPool? = null
+    private val loadedSounds = HashSet<Int>()
+    private var idTap = 0
+    private var idConfirm = 0
+    private var idGenerateTick = 0
+    private var idReveal = 0
+
+    private fun pool(context: Context): SoundPool {
+        soundPool?.let { return it }
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_GAME)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        val pool = SoundPool.Builder()
+            .setMaxStreams(4)
+            .setAudioAttributes(attributes)
+            .build()
+        pool.setOnLoadCompleteListener { _, sampleId, status -> if (status == 0) loadedSounds.add(sampleId) }
+        val app = context.applicationContext
+        idTap = pool.load(app, R.raw.sfx_tap, 1)
+        idConfirm = pool.load(app, R.raw.sfx_confirm, 1)
+        idGenerateTick = pool.load(app, R.raw.sfx_generate_tick, 1)
+        idReveal = pool.load(app, R.raw.sfx_reveal, 1)
+        soundPool = pool
+        return pool
+    }
 
     /** Sound + vibration feedback for a normal tap (buttons, chips, steppers). */
     fun tap(context: Context) {
-        if (SettingsPreferences.isSoundEnabled(context)) playTone()
+        if (SettingsPreferences.isSoundEnabled(context)) playSound(context, idTap)
         if (SettingsPreferences.isVibrationEnabled(context)) vibrate(context, 20L)
     }
 
     /** Slightly stronger feedback for a confirming action (e.g. keypad "confirm", save, generate). */
     fun confirm(context: Context) {
-        if (SettingsPreferences.isSoundEnabled(context)) playTone(ToneGenerator.TONE_PROP_ACK)
+        if (SettingsPreferences.isSoundEnabled(context)) playSound(context, idConfirm)
         if (SettingsPreferences.isVibrationEnabled(context)) vibrate(context, 35L)
     }
 
-    private fun playTone(tone: Int = ToneGenerator.TONE_PROP_BEEP2) {
+    /** Soft twinkle played on each number tick while the "magia in corso" rotation is running. */
+    fun generateTick(context: Context) {
+        if (SettingsPreferences.isSoundEnabled(context)) playSound(context, idGenerateTick, volume = .55f)
+    }
+
+    /** Rewarding ascending chime for the final reveal (combinations ready / shown). */
+    fun reveal(context: Context) {
+        if (SettingsPreferences.isSoundEnabled(context)) playSound(context, idReveal)
+        if (SettingsPreferences.isVibrationEnabled(context)) vibrate(context, 45L)
+    }
+
+    private fun playSound(context: Context, soundId: Int, volume: Float = 1f) {
         runCatching {
-            val generator = toneGenerator ?: ToneGenerator(AudioManager.STREAM_SYSTEM, 60).also { toneGenerator = it }
-            generator.startTone(tone, 40)
+            val pool = pool(context)
+            if (soundId != 0 && loadedSounds.contains(soundId)) {
+                pool.play(soundId, volume, volume, 1, 0, 1f)
+            }
         }
     }
 
