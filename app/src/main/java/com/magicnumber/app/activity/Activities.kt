@@ -23,8 +23,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.magicnumber.app.ui.components.AnimatedMagicBackdrop
+import com.magicnumber.app.ui.components.FeaturedMagicCard
 import com.magicnumber.app.ui.components.MagicActionCard
 import com.magicnumber.app.ui.components.MagicButton
+import com.magicnumber.app.ui.components.MagicLogoOrb
 import com.magicnumber.app.ui.components.MagicPage
 import com.magicnumber.app.ui.components.NumberBall
 import com.magicnumber.app.ui.theme.MagicGold
@@ -47,12 +50,43 @@ class SplashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         magicContent {
-            MagicPage("NUMBER MAGIC", "I tuoi numeri. La tua fortuna.") {
-                Text("∞", fontSize = 100.sp, color = MagicGold)
-                Spacer(Modifier.height(18.dp))
-                Text("Scienza, logica e un pizzico di magia.", color = MagicMuted, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(36.dp))
-                MagicButton("INIZIA IL TUO VIAGGIO") { open<HomeActivity>() }
+            AnimatedMagicBackdrop {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(Modifier.height(36.dp))
+                    MagicLogoOrb()
+                    Spacer(Modifier.height(26.dp))
+                    Text(
+                        "NUMBER\nMAGIC",
+                        fontSize = 42.sp,
+                        lineHeight = 42.sp,
+                        fontWeight = FontWeight.Black,
+                        textAlign = TextAlign.Center,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "I TUOI NUMERI. LA TUA FORTUNA.",
+                        color = MagicGold,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.8.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(22.dp))
+                    Text(
+                        "Scienza, logica e un pizzico di magia.\nOgni giorno, una combinazione tutta tua.",
+                        color = MagicMuted,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 22.sp
+                    )
+                    Spacer(Modifier.weight(1f))
+                    MagicButton("INIZIA IL TUO VIAGGIO") { open<HomeActivity>() }
+                    Spacer(Modifier.height(12.dp))
+                    Text("OFFLINE · PERSONALE · DETERMINISTICO", color = MagicMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
+                }
             }
         }
     }
@@ -62,14 +96,21 @@ class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         magicContent {
-            MagicPage("Cosa vuoi fare oggi?", "Scegli il tuo percorso numerico") {
-                MagicActionCard("Combinazioni fortunate", "Trova le tue combinazioni di oggi", "★") { open<NumberSourceActivity>() }
-                Spacer(Modifier.height(12.dp))
-                MagicActionCard("Genera i miei numeri", "Crea un set personale", "◆") { open<GenerateNumbersActivity>() }
+            MagicPage("Cosa vuoi fare oggi?", "Il tuo universo numerico è pronto") {
+                MagicLogoOrb(compact = true)
+                Spacer(Modifier.height(14.dp))
+                FeaturedMagicCard(
+                    title = "Combinazioni fortunate",
+                    description = "Parti dai tuoi numeri o lascia che il sistema crei il set di oggi.",
+                    action = "ATTIVA LA MAGIA  →",
+                    onClick = { open<NumberSourceActivity>() }
+                )
+                Spacer(Modifier.height(16.dp))
+                MagicActionCard("Genera i miei numeri", "Crea il tuo set personale del giorno", "◆") { open<GenerateNumbersActivity>() }
                 Spacer(Modifier.height(12.dp))
                 MagicActionCard("Inserisci i miei numeri", "Digita manualmente il tuo set", "⌨") { open<ManualNumbersActivity>() }
                 Spacer(Modifier.height(12.dp))
-                MagicActionCard("Tutte le combinazioni", "Prepara il set per il combinatore", "▦") { open<ManualNumbersActivity>() }
+                MagicActionCard("Tutte le combinazioni", "Esplora tutte le combinazioni possibili", "▦") { open<ManualNumbersActivity>() }
                 Spacer(Modifier.height(12.dp))
                 MagicActionCard("Le mie sessioni", "Rivedi risultati e set salvati", "◷") { open<HistoryActivity>() }
                 Spacer(Modifier.height(12.dp))
