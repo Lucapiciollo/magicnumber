@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -239,15 +240,71 @@ class ManualNumbersActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         magicContent {
-            MagicPage("Inserisci i tuoi 10 numeri", "Il tastierino diventerà interattivo nello step dedicato") {
-                NumberGrid(manualNumbers)
-                Spacer(Modifier.height(24.dp))
-                KeypadMock()
-                Spacer(Modifier.height(24.dp))
-                MagicButton("CONFERMA NUMERI") {
-                    startActivity(Intent(this@ManualNumbersActivity, CombinationConfigActivity::class.java).apply {
-                        putIntegerArrayListExtra(EXTRA_SELECTED_NUMBERS, ArrayList(manualNumbers))
-                    })
+            var selectedNumbers by remember { mutableStateOf(emptyList<Int>()) }
+            var currentInput by remember { mutableStateOf("") }
+            var message by remember { mutableStateOf("Digita un numero e premi ✓ per aggiungerlo") }
+
+            MagicPage("Inserisci i tuoi numeri", "Crea liberamente il set da cui partiranno le combinazioni") {
+                Text("IL TUO SET", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+                Spacer(Modifier.height(10.dp))
+                if (selectedNumbers.isEmpty()) {
+                    InfoCard("Numeri inseriti", "0")
+                } else {
+                    NumberGrid(selectedNumbers.sorted(), highlighted = true)
+                }
+                Spacer(Modifier.height(18.dp))
+                InputDisplay(currentInput.ifEmpty { "—" }, selectedNumbers.size)
+                Spacer(Modifier.height(14.dp))
+                Text(message, color = MagicMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(18.dp))
+                NumberKeypad(
+                    onDigit = { digit ->
+                        if (currentInput.length < 3) {
+                            currentInput = (currentInput + digit).trimStart('0').ifEmpty { "0" }
+                            message = "Premi ✓ per aggiungere ${currentInput} al set"
+                        }
+                    },
+                    onBackspace = {
+                        if (currentInput.isNotEmpty()) {
+                            currentInput = currentInput.dropLast(1)
+                            message = if (currentInput.isEmpty()) "Digita il prossimo numero" else "Numero corrente: $currentInput"
+                        } else if (selectedNumbers.isNotEmpty()) {
+                            val removed = selectedNumbers.last()
+                            selectedNumbers = selectedNumbers.dropLast(1)
+                            message = "Rimosso $removed dal set"
+                        }
+                    },
+                    onConfirm = {
+                        val value = currentInput.toIntOrNull()
+                        when {
+                            value == null -> message = "Digita prima un numero"
+                            value !in 1..999 -> message = "Il numero deve essere compreso tra 1 e 999"
+                            value in selectedNumbers -> message = "$value è già presente nel set"
+                            else -> {
+                                selectedNumbers = selectedNumbers + value
+                                currentInput = ""
+                                message = "$value aggiunto · ${selectedNumbers.size} numeri nel set"
+                            }
+                        }
+                    }
+                )
+                Spacer(Modifier.height(22.dp))
+                MagicButton(if (selectedNumbers.size >= 2) "CONFERMA ${selectedNumbers.size} NUMERI" else "INSERISCI ALMENO 2 NUMERI") {
+                    if (selectedNumbers.size >= 2) {
+                        startActivity(Intent(this@ManualNumbersActivity, CombinationConfigActivity::class.java).apply {
+                            putIntegerArrayListExtra(EXTRA_SELECTED_NUMBERS, ArrayList(selectedNumbers.distinct().sorted()))
+                        })
+                    } else {
+                        message = "Servono almeno 2 numeri per creare combinazioni"
+                    }
+                }
+                if (selectedNumbers.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    MagicButton("AZZERA SET", {
+                        selectedNumbers = emptyList()
+                        currentInput = ""
+                        message = "Set azzerato"
+                    }, secondary = true)
                 }
             }
         }
@@ -272,7 +329,6 @@ class CombinationConfigActivity : ComponentActivity() {
                 Spacer(Modifier.height(12.dp))
                 NumberGrid(selectedNumbers, highlighted = true)
                 Spacer(Modifier.height(24.dp))
-
                 Text("STRUTTURA", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
                 Spacer(Modifier.height(10.dp))
                 StepperCard("Numeri per combinazione", combinationSize, combinationSize > 1, combinationSize < maxK) {
@@ -280,14 +336,12 @@ class CombinationConfigActivity : ComponentActivity() {
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(combinationLabel(combinationSize), color = MagicMuted, fontWeight = FontWeight.Bold)
-
                 Spacer(Modifier.height(24.dp))
                 Text("RISULTATO FORTUNATO", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
                 Spacer(Modifier.height(10.dp))
                 StepperCard("Combinazioni da estrarre", luckyCount, luckyCount > 1, luckyCount < maxLucky) {
                     luckyCount = (luckyCount + it).coerceIn(1, maxLucky)
                 }
-
                 Spacer(Modifier.height(18.dp))
                 InfoCard("Numeri disponibili", selectedNumbers.size.toString())
                 Spacer(Modifier.height(12.dp))
@@ -295,7 +349,6 @@ class CombinationConfigActivity : ComponentActivity() {
                 Spacer(Modifier.height(12.dp))
                 InfoCard("Richiesta", "$luckyCount × ${combinationLabel(combinationSize).lowercase()}")
                 Spacer(Modifier.height(28.dp))
-
                 MagicButton("PROCEDI ALLA MAGIA") {
                     startActivity(Intent(this@CombinationConfigActivity, BiometricMagicActivity::class.java).apply {
                         putIntegerArrayListExtra(EXTRA_SELECTED_NUMBERS, ArrayList(selectedNumbers))
@@ -424,14 +477,44 @@ private fun StepButton(symbol: String, enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun KeypadMock() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("←", "0", "✓")).forEach { keys ->
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun InputDisplay(value: String, selectedCount: Int) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MagicSurface)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text("NUMERO CORRENTE", color = MagicMuted, fontSize = 10.sp, letterSpacing = 1.sp)
+                Text(value, color = MagicGold, fontSize = 34.sp, fontWeight = FontWeight.Black)
+            }
+            Text("$selectedCount nel set", color = MagicMuted, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun NumberKeypad(onDigit: (String) -> Unit, onBackspace: () -> Unit, onConfirm: () -> Unit) {
+    val rows = listOf(
+        listOf("1", "2", "3"),
+        listOf("4", "5", "6"),
+        listOf("7", "8", "9"),
+        listOf("←", "0", "✓")
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        rows.forEach { keys ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 keys.forEach { key ->
-                    Card(modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MagicSurface)) {
-                        Column(modifier = Modifier.fillMaxWidth().height(52.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Text(key, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Card(
+                        onClick = {
+                            when (key) {
+                                "←" -> onBackspace()
+                                "✓" -> onConfirm()
+                                else -> onDigit(key)
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(58.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = if (key == "✓") MagicGold.copy(alpha = .2f) else MagicSurface)
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Text(key, color = if (key == "✓") MagicGold else Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)
                         }
                     }
                 }
