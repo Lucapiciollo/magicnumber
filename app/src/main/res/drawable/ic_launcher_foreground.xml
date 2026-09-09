@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Main golden sparkle -->
+    <path
+        android:fillColor="#FFC857"
+        android:pathData="M54,26 L60.36,47.64 L82,54 L60.36,60.36 L54,82 L47.64,60.36 L26,54 L47.64,47.64 Z" />
+    <!-- Small purple sparkle, top-right -->
+    <path
+        android:fillColor="#9D6CFF"
+        android:pathData="M78,21 L80.12,27.88 L87,30 L80.12,32.12 L78,39 L75.88,32.12 L69,30 L75.88,27.88 Z" />
+    <!-- Small purple sparkle, bottom-left -->
+    <path
+        android:fillColor="#9D6CFF"
+        android:pathData="M30,69 L32.12,75.88 L39,78 L32.12,80.12 L30,87 L27.88,80.12 L21,78 L27.88,75.88 Z" />
+</vector>
