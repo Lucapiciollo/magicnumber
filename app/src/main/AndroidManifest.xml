@@ -8,9 +8,15 @@
 
         <activity android:name=".activity.SettingsActivity" android:exported="false" />
         <activity android:name=".activity.HistoryActivity" android:exported="false" />
-        <activity android:name=".activity.MagicResultsActivity" android:exported="false" />
-        <activity android:name=".activity.MagicAnimationActivity" android:exported="false" />
-        <activity android:name=".activity.BiometricMagicActivity" android:exported="false" />
+
+        <activity android:name=".activity.LuckyResultsActivity" android:exported="false" />
+        <activity android:name=".activity.LuckyAnimationActivity" android:exported="false" />
+        <activity android:name=".activity.LuckyBiometricActivity" android:exported="false" />
+        <activity-alias
+            android:name=".activity.BiometricMagicActivity"
+            android:exported="false"
+            android:targetActivity=".activity.LuckyBiometricActivity" />
+
         <activity android:name=".activity.CombinationConfigActivity" android:exported="false" />
         <activity android:name=".activity.ManualNumbersActivity" android:exported="false" />
         <activity android:name=".activity.GeneratedNumbersActivity" android:exported="false" />
