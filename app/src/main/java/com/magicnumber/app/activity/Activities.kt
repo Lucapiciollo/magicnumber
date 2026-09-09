@@ -18,6 +18,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,8 +40,13 @@ import com.magicnumber.app.ui.theme.MagicGold
 import com.magicnumber.app.ui.theme.MagicMuted
 import com.magicnumber.app.ui.theme.MagicNumberTheme
 import com.magicnumber.app.ui.theme.MagicSurface
+import java.util.Random
 
-private val mockNumbers = listOf(4, 11, 17, 29, 36, 44, 53, 67, 74, 88)
+private const val EXTRA_GENERATED_NUMBERS = "generated_numbers"
+private const val EXTRA_MIN = "generation_min"
+private const val EXTRA_MAX = "generation_max"
+private const val EXTRA_COUNT = "generation_count"
+
 private val manualNumbers = listOf(3, 7, 12, 18, 25, 34, 48, 61, 72, 89)
 
 private inline fun <reified T : ComponentActivity> ComponentActivity.open() {
@@ -46,6 +55,16 @@ private inline fun <reified T : ComponentActivity> ComponentActivity.open() {
 
 private fun ComponentActivity.magicContent(content: @Composable () -> Unit) {
     setContent { MagicNumberTheme { content() } }
+}
+
+private fun previewGeneratedNumbers(min: Int, max: Int, count: Int): List<Int> {
+    val safeMin = min.coerceAtLeast(0)
+    val safeMax = max.coerceAtLeast(safeMin)
+    val available = safeMax - safeMin + 1
+    val safeCount = count.coerceIn(1, available)
+    val seed = safeMin * 73_856_093L + safeMax * 19_349_663L + safeCount * 83_492_791L
+    val random = Random(seed)
+    return (safeMin..safeMax).shuffled(random).take(safeCount).sorted()
 }
 
 class SplashActivity : ComponentActivity() {
@@ -126,10 +145,28 @@ class NumberSourceActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         magicContent {
-            MagicPage("Scegli come ottenere i tuoi numeri", "Puoi generarli oppure inserirli tu") {
-                MagicActionCard("Genera i numeri per me", "Il sistema prepara il set iniziale", "◆") { open<GenerateNumbersActivity>() }
-                Spacer(Modifier.height(18.dp))
-                MagicActionCard("Inserisco i miei numeri", "Usa il tastierino manuale", "⌨") { open<ManualNumbersActivity>() }
+            AnimatedMagicBackdrop {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 34.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    MagicLogoOrb(compact = true)
+                    Spacer(Modifier.height(20.dp))
+                    Text("DA DOVE PARTIAMO?", color = MagicGold, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Scegli l'origine dei tuoi numeri", fontWeight = FontWeight.Black, fontSize = 28.sp, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(10.dp))
+                    Text("Puoi affidarti al sistema oppure usare il tuo set personale.", color = MagicMuted, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(34.dp))
+                    FeaturedMagicCard(
+                        title = "Generali per me",
+                        description = "Scegli intervallo e quantità. Il sistema prepara il set iniziale.",
+                        action = "GENERA IL SET  →",
+                        onClick = { open<GenerateNumbersActivity>() }
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    MagicActionCard("Inserisco i miei numeri", "Usa il tastierino numerico e crea il tuo set", "⌨") { open<ManualNumbersActivity>() }
+                }
             }
         }
     }
@@ -139,12 +176,44 @@ class GenerateNumbersActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         magicContent {
-            MagicPage("Genera i tuoi numeri", "Configurazione mock della prima milestone") {
-                InfoCard("Intervallo", "1 – 90")
+            var min by remember { mutableIntStateOf(1) }
+            var max by remember { mutableIntStateOf(90) }
+            var count by remember { mutableIntStateOf(10) }
+
+            val available = (max - min + 1).coerceAtLeast(1)
+            val safeCount = count.coerceIn(1, available)
+            if (safeCount != count) count = safeCount
+
+            MagicPage("Genera i tuoi numeri", "Configura il set che diventerà la base della tua magia") {
+                Text("INTERVALLO", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+                Spacer(Modifier.height(10.dp))
+                StepperCard("Numero minimo", min, canDecrease = min > 0, canIncrease = min < max) { delta ->
+                    min = (min + delta).coerceIn(0, max)
+                }
                 Spacer(Modifier.height(12.dp))
-                InfoCard("Quanti numeri generare?", "10")
-                Spacer(Modifier.height(30.dp))
-                MagicButton("GENERA IL MIO SET") { open<GeneratedNumbersActivity>() }
+                StepperCard("Numero massimo", max, canDecrease = max > min, canIncrease = max < 999) { delta ->
+                    max = (max + delta).coerceIn(min, 999)
+                }
+                Spacer(Modifier.height(26.dp))
+                Text("QUANTITÀ DEL SET", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+                Spacer(Modifier.height(10.dp))
+                StepperCard("Numeri da generare", count, canDecrease = count > 1, canIncrease = count < available) { delta ->
+                    count = (count + delta).coerceIn(1, available)
+                }
+                Spacer(Modifier.height(18.dp))
+                InfoCard("Possibili valori distinti", available.toString())
+                Spacer(Modifier.height(28.dp))
+                MagicButton("GENERA IL MIO SET") {
+                    val generated = previewGeneratedNumbers(min, max, count)
+                    startActivity(Intent(this@GenerateNumbersActivity, GeneratedNumbersActivity::class.java).apply {
+                        putIntegerArrayListExtra(EXTRA_GENERATED_NUMBERS, ArrayList(generated))
+                        putExtra(EXTRA_MIN, min)
+                        putExtra(EXTRA_MAX, max)
+                        putExtra(EXTRA_COUNT, count)
+                    })
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Preview locale · il motore UUID + data verrà collegato nello step dedicato", color = MagicMuted, fontSize = 11.sp, textAlign = TextAlign.Center)
             }
         }
     }
@@ -153,13 +222,24 @@ class GenerateNumbersActivity : ComponentActivity() {
 class GeneratedNumbersActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val numbers = intent.getIntegerArrayListExtra(EXTRA_GENERATED_NUMBERS)?.toList()
+            ?: previewGeneratedNumbers(1, 90, 10)
+        val min = intent.getIntExtra(EXTRA_MIN, 1)
+        val max = intent.getIntExtra(EXTRA_MAX, 90)
+
         magicContent {
-            MagicPage("Ecco i tuoi 10 numeri!", "Set dimostrativo, il motore arriverà nello step dedicato") {
-                NumberGrid(mockNumbers, highlighted = true)
+            MagicPage("Il tuo set è pronto", "${numbers.size} numeri generati nell'intervallo $min – $max") {
+                Text("SET GENERATO", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+                Spacer(Modifier.height(14.dp))
+                NumberGrid(numbers, highlighted = true)
+                Spacer(Modifier.height(22.dp))
+                InfoCard("Numeri unici", numbers.size.toString())
+                Spacer(Modifier.height(12.dp))
+                InfoCard("Intervallo", "$min – $max")
                 Spacer(Modifier.height(28.dp))
                 MagicButton("USA QUESTI NUMERI") { open<CombinationConfigActivity>() }
                 Spacer(Modifier.height(10.dp))
-                MagicButton("GENERA UN NUOVO SET", { open<GenerateNumbersActivity>() }, secondary = true)
+                MagicButton("CAMBIA CONFIGURAZIONE", { finish() }, secondary = true)
             }
         }
     }
@@ -292,6 +372,40 @@ private fun NumberGrid(numbers: List<Int>, highlighted: Boolean = false) {
             }
         }
     }
+}
+
+@Composable
+private fun StepperCard(label: String, value: Int, canDecrease: Boolean, canIncrease: Boolean, onStep: (Int) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MagicSurface)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(label, color = MagicMuted, fontSize = 12.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(value.toString(), color = MagicGold, fontWeight = FontWeight.Black, fontSize = 28.sp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StepButton("−", canDecrease) { onStep(-1) }
+                StepButton("+", canIncrease) { onStep(1) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepButton(symbol: String, enabled: Boolean, onClick: () -> Unit) {
+    MagicButton(
+        text = symbol,
+        onClick = { if (enabled) onClick() },
+        secondary = !enabled
+    )
 }
 
 @Composable
