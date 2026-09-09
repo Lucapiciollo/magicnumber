@@ -46,6 +46,10 @@ private const val EXTRA_GENERATED_NUMBERS = "generated_numbers"
 private const val EXTRA_MIN = "generation_min"
 private const val EXTRA_MAX = "generation_max"
 private const val EXTRA_COUNT = "generation_count"
+private const val EXTRA_SELECTED_NUMBERS = "selected_numbers"
+private const val EXTRA_COMBINATION_SIZE = "combination_size"
+private const val EXTRA_LUCKY_COUNT = "lucky_count"
+private const val EXTRA_TOTAL_COMBINATIONS = "total_combinations"
 
 private val manualNumbers = listOf(3, 7, 12, 18, 25, 34, 48, 61, 72, 89)
 
@@ -67,6 +71,28 @@ private fun previewGeneratedNumbers(min: Int, max: Int, count: Int): List<Int> {
     return (safeMin..safeMax).shuffled(random).take(safeCount).sorted()
 }
 
+private fun combinationsCount(n: Int, k: Int): Long {
+    if (k < 0 || n < 0 || k > n) return 0L
+    if (k == 0 || k == n) return 1L
+    val r = minOf(k, n - k)
+    var result = 1L
+    for (i in 1..r) {
+        val numerator = n - r + i
+        if (result > Long.MAX_VALUE / numerator) return Long.MAX_VALUE
+        result = result * numerator / i
+    }
+    return result
+}
+
+private fun combinationLabel(k: Int): String = when (k) {
+    2 -> "Coppia"
+    3 -> "Terzina"
+    4 -> "Quartina"
+    5 -> "Cinquina"
+    6 -> "Sestina"
+    else -> "$k numeri"
+}
+
 class SplashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,30 +105,11 @@ class SplashActivity : ComponentActivity() {
                     Spacer(Modifier.height(36.dp))
                     MagicLogoOrb()
                     Spacer(Modifier.height(26.dp))
-                    Text(
-                        "NUMBER\nMAGIC",
-                        fontSize = 42.sp,
-                        lineHeight = 42.sp,
-                        fontWeight = FontWeight.Black,
-                        textAlign = TextAlign.Center,
-                        letterSpacing = 2.sp
-                    )
+                    Text("NUMBER\nMAGIC", fontSize = 42.sp, lineHeight = 42.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, letterSpacing = 2.sp)
                     Spacer(Modifier.height(14.dp))
-                    Text(
-                        "I TUOI NUMERI. LA TUA FORTUNA.",
-                        color = MagicGold,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.8.sp,
-                        textAlign = TextAlign.Center
-                    )
+                    Text("I TUOI NUMERI. LA TUA FORTUNA.", color = MagicGold, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(22.dp))
-                    Text(
-                        "Scienza, logica e un pizzico di magia.\nOgni giorno, una combinazione tutta tua.",
-                        color = MagicMuted,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 22.sp
-                    )
+                    Text("Scienza, logica e un pizzico di magia.\nOgni giorno, una combinazione tutta tua.", color = MagicMuted, textAlign = TextAlign.Center, lineHeight = 22.sp)
                     Spacer(Modifier.weight(1f))
                     MagicButton("INIZIA IL TUO VIAGGIO") { open<HomeActivity>() }
                     Spacer(Modifier.height(12.dp))
@@ -120,12 +127,7 @@ class HomeActivity : ComponentActivity() {
             MagicPage("Cosa vuoi fare oggi?", "Il tuo universo numerico è pronto") {
                 MagicLogoOrb(compact = true)
                 Spacer(Modifier.height(14.dp))
-                FeaturedMagicCard(
-                    title = "Combinazioni fortunate",
-                    description = "Parti dai tuoi numeri o lascia che il sistema crei il set di oggi.",
-                    action = "ATTIVA LA MAGIA  →",
-                    onClick = { open<NumberSourceActivity>() }
-                )
+                FeaturedMagicCard("Combinazioni fortunate", "Parti dai tuoi numeri o lascia che il sistema crei il set di oggi.", "ATTIVA LA MAGIA  →") { open<NumberSourceActivity>() }
                 Spacer(Modifier.height(16.dp))
                 MagicActionCard("Genera i miei numeri", "Crea il tuo set personale del giorno", "◆") { open<GenerateNumbersActivity>() }
                 Spacer(Modifier.height(12.dp))
@@ -146,10 +148,7 @@ class NumberSourceActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         magicContent {
             AnimatedMagicBackdrop {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 34.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 34.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     MagicLogoOrb(compact = true)
                     Spacer(Modifier.height(20.dp))
                     Text("DA DOVE PARTIAMO?", color = MagicGold, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, fontSize = 12.sp)
@@ -158,12 +157,7 @@ class NumberSourceActivity : ComponentActivity() {
                     Spacer(Modifier.height(10.dp))
                     Text("Puoi affidarti al sistema oppure usare il tuo set personale.", color = MagicMuted, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(34.dp))
-                    FeaturedMagicCard(
-                        title = "Generali per me",
-                        description = "Scegli intervallo e quantità. Il sistema prepara il set iniziale.",
-                        action = "GENERA IL SET  →",
-                        onClick = { open<GenerateNumbersActivity>() }
-                    )
+                    FeaturedMagicCard("Generali per me", "Scegli intervallo e quantità. Il sistema prepara il set iniziale.", "GENERA IL SET  →") { open<GenerateNumbersActivity>() }
                     Spacer(Modifier.height(16.dp))
                     MagicActionCard("Inserisco i miei numeri", "Usa il tastierino numerico e crea il tuo set", "⌨") { open<ManualNumbersActivity>() }
                 }
@@ -179,7 +173,6 @@ class GenerateNumbersActivity : ComponentActivity() {
             var min by remember { mutableIntStateOf(1) }
             var max by remember { mutableIntStateOf(90) }
             var count by remember { mutableIntStateOf(10) }
-
             val available = (max - min + 1).coerceAtLeast(1)
             val safeCount = count.coerceIn(1, available)
             if (safeCount != count) count = safeCount
@@ -187,19 +180,13 @@ class GenerateNumbersActivity : ComponentActivity() {
             MagicPage("Genera i tuoi numeri", "Configura il set che diventerà la base della tua magia") {
                 Text("INTERVALLO", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
                 Spacer(Modifier.height(10.dp))
-                StepperCard("Numero minimo", min, canDecrease = min > 0, canIncrease = min < max) { delta ->
-                    min = (min + delta).coerceIn(0, max)
-                }
+                StepperCard("Numero minimo", min, min > 0, min < max) { min = (min + it).coerceIn(0, max) }
                 Spacer(Modifier.height(12.dp))
-                StepperCard("Numero massimo", max, canDecrease = max > min, canIncrease = max < 999) { delta ->
-                    max = (max + delta).coerceIn(min, 999)
-                }
+                StepperCard("Numero massimo", max, max > min, max < 999) { max = (max + it).coerceIn(min, 999) }
                 Spacer(Modifier.height(26.dp))
                 Text("QUANTITÀ DEL SET", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
                 Spacer(Modifier.height(10.dp))
-                StepperCard("Numeri da generare", count, canDecrease = count > 1, canIncrease = count < available) { delta ->
-                    count = (count + delta).coerceIn(1, available)
-                }
+                StepperCard("Numeri da generare", count, count > 1, count < available) { count = (count + it).coerceIn(1, available) }
                 Spacer(Modifier.height(18.dp))
                 InfoCard("Possibili valori distinti", available.toString())
                 Spacer(Modifier.height(28.dp))
@@ -222,8 +209,7 @@ class GenerateNumbersActivity : ComponentActivity() {
 class GeneratedNumbersActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val numbers = intent.getIntegerArrayListExtra(EXTRA_GENERATED_NUMBERS)?.toList()
-            ?: previewGeneratedNumbers(1, 90, 10)
+        val numbers = intent.getIntegerArrayListExtra(EXTRA_GENERATED_NUMBERS)?.toList() ?: previewGeneratedNumbers(1, 90, 10)
         val min = intent.getIntExtra(EXTRA_MIN, 1)
         val max = intent.getIntExtra(EXTRA_MAX, 90)
 
@@ -237,7 +223,11 @@ class GeneratedNumbersActivity : ComponentActivity() {
                 Spacer(Modifier.height(12.dp))
                 InfoCard("Intervallo", "$min – $max")
                 Spacer(Modifier.height(28.dp))
-                MagicButton("USA QUESTI NUMERI") { open<CombinationConfigActivity>() }
+                MagicButton("USA QUESTI NUMERI") {
+                    startActivity(Intent(this@GeneratedNumbersActivity, CombinationConfigActivity::class.java).apply {
+                        putIntegerArrayListExtra(EXTRA_SELECTED_NUMBERS, ArrayList(numbers))
+                    })
+                }
                 Spacer(Modifier.height(10.dp))
                 MagicButton("CAMBIA CONFIGURAZIONE", { finish() }, secondary = true)
             }
@@ -249,12 +239,16 @@ class ManualNumbersActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         magicContent {
-            MagicPage("Inserisci i tuoi 10 numeri", "Il tastierino è già predisposto per lo step funzionale") {
+            MagicPage("Inserisci i tuoi 10 numeri", "Il tastierino diventerà interattivo nello step dedicato") {
                 NumberGrid(manualNumbers)
                 Spacer(Modifier.height(24.dp))
                 KeypadMock()
                 Spacer(Modifier.height(24.dp))
-                MagicButton("CONFERMA NUMERI") { open<CombinationConfigActivity>() }
+                MagicButton("CONFERMA NUMERI") {
+                    startActivity(Intent(this@ManualNumbersActivity, CombinationConfigActivity::class.java).apply {
+                        putIntegerArrayListExtra(EXTRA_SELECTED_NUMBERS, ArrayList(manualNumbers))
+                    })
+                }
             }
         }
     }
@@ -263,17 +257,53 @@ class ManualNumbersActivity : ComponentActivity() {
 class CombinationConfigActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val selectedNumbers = intent.getIntegerArrayListExtra(EXTRA_SELECTED_NUMBERS)?.distinct()?.sorted() ?: manualNumbers
+
         magicContent {
-            MagicPage("Configura le combinazioni fortunate", "Definisci forma e quantità del risultato") {
-                NumberGrid(manualNumbers)
+            val maxK = selectedNumbers.size.coerceAtLeast(1)
+            var combinationSize by remember { mutableIntStateOf(minOf(6, maxK)) }
+            var luckyCount by remember { mutableIntStateOf(4) }
+            val total = combinationsCount(selectedNumbers.size, combinationSize)
+            val maxLucky = total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt().coerceAtLeast(1)
+            if (luckyCount > maxLucky) luckyCount = maxLucky
+
+            MagicPage("Configura le combinazioni fortunate", "Decidi quanti numeri conterrà ogni combinazione e quante vuoi riceverne") {
+                Text("IL TUO SET", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+                Spacer(Modifier.height(12.dp))
+                NumberGrid(selectedNumbers, highlighted = true)
                 Spacer(Modifier.height(24.dp))
-                InfoCard("Numeri per combinazione", "6 · Sestina")
+
+                Text("STRUTTURA", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+                Spacer(Modifier.height(10.dp))
+                StepperCard("Numeri per combinazione", combinationSize, combinationSize > 1, combinationSize < maxK) {
+                    combinationSize = (combinationSize + it).coerceIn(1, maxK)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(combinationLabel(combinationSize), color = MagicMuted, fontWeight = FontWeight.Bold)
+
+                Spacer(Modifier.height(24.dp))
+                Text("RISULTATO FORTUNATO", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+                Spacer(Modifier.height(10.dp))
+                StepperCard("Combinazioni da estrarre", luckyCount, luckyCount > 1, luckyCount < maxLucky) {
+                    luckyCount = (luckyCount + it).coerceIn(1, maxLucky)
+                }
+
+                Spacer(Modifier.height(18.dp))
+                InfoCard("Numeri disponibili", selectedNumbers.size.toString())
                 Spacer(Modifier.height(12.dp))
-                InfoCard("Combinazioni fortunate", "4")
+                InfoCard("Combinazioni possibili", if (total == Long.MAX_VALUE) "oltre il limite" else total.toString())
                 Spacer(Modifier.height(12.dp))
-                InfoCard("Combinazioni possibili", "210")
+                InfoCard("Richiesta", "$luckyCount × ${combinationLabel(combinationSize).lowercase()}")
                 Spacer(Modifier.height(28.dp))
-                MagicButton("PROCEDI") { open<BiometricMagicActivity>() }
+
+                MagicButton("PROCEDI ALLA MAGIA") {
+                    startActivity(Intent(this@CombinationConfigActivity, BiometricMagicActivity::class.java).apply {
+                        putIntegerArrayListExtra(EXTRA_SELECTED_NUMBERS, ArrayList(selectedNumbers))
+                        putExtra(EXTRA_COMBINATION_SIZE, combinationSize)
+                        putExtra(EXTRA_LUCKY_COUNT, luckyCount)
+                        putExtra(EXTRA_TOTAL_COMBINATIONS, total)
+                    })
+                }
             }
         }
     }
@@ -364,10 +394,7 @@ class SettingsActivity : ComponentActivity() {
 private fun NumberGrid(numbers: List<Int>, highlighted: Boolean = false) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         numbers.chunked(5).forEach { rowNumbers ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 rowNumbers.forEach { NumberBall(it, highlighted) }
             }
         }
@@ -376,16 +403,8 @@ private fun NumberGrid(numbers: List<Int>, highlighted: Boolean = false) {
 
 @Composable
 private fun StepperCard(label: String, value: Int, canDecrease: Boolean, canIncrease: Boolean, onStep: (Int) -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MagicSurface)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MagicSurface)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text(label, color = MagicMuted, fontSize = 12.sp)
                 Spacer(Modifier.height(4.dp))
@@ -401,11 +420,7 @@ private fun StepperCard(label: String, value: Int, canDecrease: Boolean, canIncr
 
 @Composable
 private fun StepButton(symbol: String, enabled: Boolean, onClick: () -> Unit) {
-    MagicButton(
-        text = symbol,
-        onClick = { if (enabled) onClick() },
-        secondary = !enabled
-    )
+    MagicButton(text = symbol, onClick = { if (enabled) onClick() }, secondary = !enabled)
 }
 
 @Composable
@@ -414,11 +429,7 @@ private fun KeypadMock() {
         listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("←", "0", "✓")).forEach { keys ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 keys.forEach { key ->
-                    Card(
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MagicSurface)
-                    ) {
+                    Card(modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MagicSurface)) {
                         Column(modifier = Modifier.fillMaxWidth().height(52.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                             Text(key, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         }
@@ -431,16 +442,8 @@ private fun KeypadMock() {
 
 @Composable
 private fun InfoCard(label: String, value: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MagicSurface)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MagicSurface)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(18.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = MagicMuted)
             Text(value, fontWeight = FontWeight.Bold, color = MagicGold)
         }
@@ -457,11 +460,7 @@ private fun ProgressLine(symbol: String, label: String) {
 
 @Composable
 private fun ResultRow(rank: String, numbers: List<Int>) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MagicSurface)
-    ) {
+    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MagicSurface)) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text("FORTUNATA #$rank", color = MagicGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             Spacer(Modifier.height(10.dp))
