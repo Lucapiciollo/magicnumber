@@ -31,6 +31,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.magicnumber.app.R
 import com.magicnumber.app.domain.magic.MagicFeedback
+import com.magicnumber.app.domain.magic.MagicEngine
 import com.magicnumber.app.domain.magic.NumberRangePreferences
 import com.magicnumber.app.domain.magic.SettingsPreferences
 import com.magicnumber.app.ui.components.MagicImageBackdrop
@@ -62,6 +65,7 @@ import com.magicnumber.app.ui.components.MagicPage
 import com.magicnumber.app.ui.components.MagicChevronRow
 import com.magicnumber.app.ui.components.MagicRowDivider
 import com.magicnumber.app.ui.components.MagicSectionTitle
+import com.magicnumber.app.ui.components.MagicSlider
 import com.magicnumber.app.ui.components.MagicStepper
 import com.magicnumber.app.ui.components.NumberBall
 import com.magicnumber.app.ui.theme.MagicAmber
@@ -90,7 +94,8 @@ private inline fun <reified T : ComponentActivity> ComponentActivity.open() {
     startActivity(Intent(this, T::class.java))
 }
 
-private fun ComponentActivity.magicContent(content: @Composable () -> Unit) {
+/** Scaffolding condiviso da tutte le Activity: applica il tema e propaga le preference effetti/animazioni. */
+internal fun ComponentActivity.magicContent(content: @Composable () -> Unit) {
     setContent {
         val effectsEnabled = remember { com.magicnumber.app.domain.magic.SettingsPreferences.isEffectsEnabled(this) }
         val animationsEnabled = remember { com.magicnumber.app.domain.magic.SettingsPreferences.isAnimationsEnabled(this) }
@@ -111,19 +116,6 @@ private fun previewGeneratedNumbers(min: Int, max: Int, count: Int): List<Int> {
     val seed = safeMin * 73_856_093L + safeMax * 19_349_663L + safeCount * 83_492_791L
     val random = Random(seed)
     return (safeMin..safeMax).shuffled(random).take(safeCount).sorted()
-}
-
-private fun combinationsCount(n: Int, k: Int): Long {
-    if (k < 0 || n < 0 || k > n) return 0L
-    if (k == 0 || k == n) return 1L
-    val r = minOf(k, n - k)
-    var result = 1L
-    for (i in 1..r) {
-        val numerator = n - r + i
-        if (result > Long.MAX_VALUE / numerator) return Long.MAX_VALUE
-        result = result * numerator / i
-    }
-    return result
 }
 
 private fun combinationLabel(k: Int): String = when (k) {
@@ -241,14 +233,16 @@ class GenerateNumbersActivity : ComponentActivity() {
             val max = NumberRangePreferences.getMax(this@GenerateNumbersActivity)
             val available = (max - min + 1).coerceAtLeast(1)
             val minCount = minOf(5, available)
-            var count by remember { mutableIntStateOf(minOf(10, available).coerceAtLeast(minCount)) }
+            var count by rememberSaveable { mutableIntStateOf(minOf(10, available).coerceAtLeast(minCount)) }
             val safeCount = count.coerceIn(minCount, available)
             if (safeCount != count) count = safeCount
 
             MagicPage("Genera i tuoi numeri", "Configura il set iniziale", background = R.drawable.bg_number_source) {
                 MagicSectionTitle("QUANTI NUMERI GENERARE?")
                 Spacer(Modifier.height(10.dp))
-                MagicStepper("Numeri da generare", count, count > minCount, count < available) { count = (count + it).coerceIn(minCount, available) }
+                MagicSlider("Numeri da generare", count, minCount..available) {
+                    count = it.coerceIn(minCount, available)
+                }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     quickPickCounts.forEach { pick ->
@@ -314,9 +308,11 @@ class ManualNumbersActivity : ComponentActivity() {
         magicContent {
             val rangeMin = NumberRangePreferences.getMin(this@ManualNumbersActivity)
             val rangeMax = NumberRangePreferences.getMax(this@ManualNumbersActivity)
-            var selectedNumbers by remember { mutableStateOf(emptyList<Int>()) }
-            var currentInput by remember { mutableStateOf("") }
-            var message by remember { mutableStateOf("Seleziona da 5 a 15 numeri per il tuo set") }
+            var selectedNumbers by rememberSaveable(
+                stateSaver = listSaver<List<Int>, Int>(save = { it }, restore = { it })
+            ) { mutableStateOf(emptyList()) }
+            var currentInput by rememberSaveable { mutableStateOf("") }
+            var message by rememberSaveable { mutableStateOf("Seleziona da 5 a 15 numeri per il tuo set") }
 
             MagicPage("Inserisci i tuoi numeri", "Seleziona da 5 a 15 numeri ($rangeMin - $rangeMax)", background = R.drawable.bg_number_source) {
                 if (selectedNumbers.isNotEmpty()) {
@@ -403,13 +399,14 @@ class CombinationConfigActivity : ComponentActivity() {
 
         magicContent {
             val maxK = selectedNumbers.size.coerceAtLeast(1)
-            var combinationSize by remember { mutableIntStateOf(minOf(6, maxK)) }
-            var luckyCount by remember { mutableIntStateOf(1) }
-            val total = combinationsCount(selectedNumbers.size, combinationSize)
+            var combinationSize by rememberSaveable { mutableIntStateOf(minOf(6, maxK)) }
+            var luckyCount by rememberSaveable { mutableIntStateOf(1) }
+            val total = remember(selectedNumbers, combinationSize) {
+                MagicEngine.combinationsCount(selectedNumbers.size, combinationSize)
+            }
             val maxLucky = total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt().coerceAtLeast(1)
             if (luckyCount > maxLucky) luckyCount = maxLucky
             if (luckyCount < 1) luckyCount = 1
-            val sizeOptions = ((maxK - 4).coerceAtLeast(1)..maxK).toList()
 
             MagicPage("Configura la tua magia", "Hai scelto ${selectedNumbers.size} numeri", background = R.drawable.bg_number_source) {
                 MagicCard(accent = MagicGold, contentPadding = 16.dp) {
@@ -418,10 +415,8 @@ class CombinationConfigActivity : ComponentActivity() {
                 Spacer(Modifier.height(24.dp))
                 MagicSectionTitle("NUMERI PER COMBINAZIONE")
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    sizeOptions.forEach { size ->
-                        MagicChip(size.toString(), selected = combinationSize == size) { combinationSize = size }
-                    }
+                MagicSlider("Numeri per combinazione", combinationSize, 1..maxK) {
+                    combinationSize = it.coerceIn(1, maxK)
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(combinationLabel(combinationSize), color = MagicMuted, fontWeight = FontWeight.Bold)
@@ -630,11 +625,11 @@ class SettingsActivity : ComponentActivity() {
                 MagicSectionTitle("INTERVALLO NUMERI PREDEFINITO")
                 Spacer(Modifier.height(10.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    MagicStepper("Da", rangeMin, rangeMin > 0, rangeMin < rangeMax, modifier = Modifier.weight(1f)) {
+                    MagicStepper("Da", rangeMin, rangeMin > 0, rangeMin < rangeMax, modifier = Modifier.weight(1f), compact = true) {
                         rangeMin = (rangeMin + it).coerceIn(0, rangeMax)
                         NumberRangePreferences.setRange(this@SettingsActivity, rangeMin, rangeMax)
                     }
-                    MagicStepper("A", rangeMax, rangeMax > rangeMin, rangeMax < 999, modifier = Modifier.weight(1f)) {
+                    MagicStepper("A", rangeMax, rangeMax > rangeMin, rangeMax < 999, modifier = Modifier.weight(1f), compact = true) {
                         rangeMax = (rangeMax + it).coerceIn(rangeMin, 999)
                         NumberRangePreferences.setRange(this@SettingsActivity, rangeMin, rangeMax)
                     }

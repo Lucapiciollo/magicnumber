@@ -1,7 +1,6 @@
 package com.magicnumber.app.ui.components
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -33,6 +32,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -76,6 +77,7 @@ import com.magicnumber.app.ui.theme.MagicSurface
 import com.magicnumber.app.ui.theme.MagicSurfaceElevated
 import com.magicnumber.app.ui.theme.MagicText
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 /** Backs the "Effetti grafici" Settings toggle — when false, ambient glows are skipped entirely. */
@@ -83,6 +85,9 @@ val LocalEffectsEnabled = staticCompositionLocalOf { true }
 
 /** Backs the "Animazioni" Settings toggle — when false, entrance/motion animations are skipped. */
 val LocalAnimationsEnabled = staticCompositionLocalOf { true }
+
+/** Oltre questo indice, [NumberBall] non aggiunge ulteriore ritardo allo stagger di comparsa. */
+private const val MAX_STAGGERED_BALLS = 24
 
 /** Soft ambient glow bleeding beyond the composable's bounds — the app's signature "premium glow". */
 private fun DrawScope.drawAmbientGlow(color: Color, alpha: Float, spread: Float = 1.35f) {
@@ -512,7 +517,10 @@ fun NumberBall(number: Int, highlighted: Boolean = false, index: Int = 0, animat
     LaunchedEffect(number, animate, animationsEnabled) {
         if (animate && animationsEnabled) {
             visible = false
-            delay(index * 65L)
+            // Lo stagger è limitato ai primi MAX_STAGGERED_BALLS elementi: con set numerosi
+            // (fino a ~1000 con range esteso) l'attesa altrimenti crescerebbe senza limite
+            // (es. 1000 * 65ms ≈ 65s prima che l'ultimo pallino compaia).
+            delay(index.coerceAtMost(MAX_STAGGERED_BALLS) * 65L)
             visible = true
         }
     }
@@ -522,6 +530,7 @@ fun NumberBall(number: Int, highlighted: Boolean = false, index: Int = 0, animat
         label = "ball-scale"
     )
     val alpha by animateFloatAsState(if (visible) 1f else 0f, label = "ball-alpha")
+
 
     Box(
         modifier = Modifier
@@ -545,33 +554,55 @@ fun NumberBall(number: Int, highlighted: Boolean = false, index: Int = 0, animat
     }
 }
 
-/** Compact +/- numeric stepper card shared by the Generate and Configuration screens. */
+/**
+ * Compact +/- numeric stepper card shared by the Generate and Configuration screens.
+ *
+ * [compact] switches to a stacked (vertical) layout for narrow contexts — e.g. the "Da"/"A"
+ * range pickers in Settings, which sit two-per-row (`Modifier.weight(1f)`). In that layout the
+ * horizontal `SpaceBetween` Row didn't leave enough room for the label/value column *and* both
+ * 44dp circular buttons once the value reached 2+ digits, causing the "+" button to overflow
+ * past the card's right edge and render clipped/overlapping — hence the vertical stack + smaller
+ * buttons here, which always fit regardless of how many digits the value has.
+ */
 @Composable
-fun MagicStepper(label: String, value: Int, canDecrease: Boolean, canIncrease: Boolean, modifier: Modifier = Modifier, onStep: (Int) -> Unit) {
+fun MagicStepper(label: String, value: Int, canDecrease: Boolean, canIncrease: Boolean, modifier: Modifier = Modifier, compact: Boolean = false, onStep: (Int) -> Unit) {
     MagicCard(modifier = modifier) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        if (compact) {
             Column {
                 Text(label, color = MagicMuted, fontSize = 12.sp)
                 Spacer(Modifier.height(4.dp))
-                Text(value.toString(), color = MagicGold, fontWeight = FontWeight.Black, fontSize = 28.sp, modifier = Modifier.animateContentSize())
+                Text(value.toString(), color = MagicGold, fontWeight = FontWeight.Black, fontSize = 26.sp, modifier = Modifier.animateContentSize())
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MagicStepButton("−", canDecrease, size = 36.dp) { onStep(-1) }
+                    MagicStepButton("+", canIncrease, size = 36.dp) { onStep(1) }
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MagicStepButton("−", canDecrease) { onStep(-1) }
-                MagicStepButton("+", canIncrease) { onStep(1) }
+        } else {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text(label, color = MagicMuted, fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(value.toString(), color = MagicGold, fontWeight = FontWeight.Black, fontSize = 28.sp, modifier = Modifier.animateContentSize())
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MagicStepButton("−", canDecrease) { onStep(-1) }
+                    MagicStepButton("+", canIncrease) { onStep(1) }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MagicStepButton(symbol: String, enabled: Boolean, onClick: () -> Unit) {
+private fun MagicStepButton(symbol: String, enabled: Boolean, size: Dp = 44.dp, onClick: () -> Unit) {
     val context = LocalContext.current
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) .86f else 1f, label = "step-btn-scale")
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(size)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(if (enabled) MagicGold.copy(alpha = .16f) else MagicSurface)
@@ -583,6 +614,45 @@ private fun MagicStepButton(symbol: String, enabled: Boolean, onClick: () -> Uni
         contentAlignment = Alignment.Center
     ) {
         Text(symbol, color = if (enabled) MagicGold else MagicMuted, fontWeight = FontWeight.Black, fontSize = 20.sp)
+    }
+}
+
+/**
+ * Card con una barra di scorrimento per scegliere rapidamente un valore intero in [range],
+ * in alternativa al +/- di [MagicStepper] quando il range può essere ampio (es. "quanti numeri
+ * generare" su un intervallo configurabile fino a ~1000 valori): con lo slider basta un trascinamento
+ * per raggiungere qualsiasi punto del range, invece di dover incrementare/decrementare un passo alla volta.
+ */
+@Composable
+fun MagicSlider(label: String, value: Int, range: IntRange, modifier: Modifier = Modifier, onValueChange: (Int) -> Unit) {
+    val context = LocalContext.current
+    MagicCard(modifier = modifier) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = MagicMuted, fontSize = 12.sp)
+            Text(value.toString(), color = MagicGold, fontWeight = FontWeight.Black, fontSize = 24.sp, modifier = Modifier.animateContentSize())
+        }
+        Spacer(Modifier.height(4.dp))
+        val hasRange = range.last > range.first
+        val steps = (range.last - range.first - 1).coerceAtLeast(0)
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.roundToInt().coerceIn(range.first, range.last)) },
+            onValueChangeFinished = { MagicFeedback.tap(context) },
+            valueRange = range.first.toFloat()..(if (hasRange) range.last else range.first + 1).toFloat(),
+            steps = steps,
+            enabled = hasRange,
+            colors = SliderDefaults.colors(
+                thumbColor = MagicGold,
+                activeTrackColor = MagicGold,
+                inactiveTrackColor = MagicBorderSoft,
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent
+            )
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(range.first.toString(), color = MagicMuted, fontSize = 11.sp)
+            Text(range.last.toString(), color = MagicMuted, fontSize = 11.sp)
+        }
     }
 }
 

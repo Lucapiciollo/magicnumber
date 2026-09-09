@@ -6,6 +6,13 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.LocalDate
 import java.util.UUID
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+
+/** Ogni tot iterazioni dei cicli pesanti si cede il thread di sfondo (cooperative yielding). */
+private const val YIELD_EVERY = 256
 
 object MagicEngine {
     private const val PREFS = "magicnumber_identity"
@@ -19,7 +26,13 @@ object MagicEngine {
         }
     }
 
-    fun luckyCombinations(
+    /**
+     * Calcola le combinazioni fortunate. Esegue il lavoro pesante (hashing SHA-256 ripetuto
+     * e ricostruzione delle combinazioni tramite ranking combinatorio) su [Dispatchers.Default],
+     * cedendo periodicamente il thread con `yield()`/`ensureActive()` per non bloccare mai la UI
+     * e per rispettare l'eventuale cancellazione della coroutine chiamante.
+     */
+    suspend fun luckyCombinations(
         context: Context,
         numbers: List<Int>,
         combinationSize: Int,
@@ -47,17 +60,24 @@ object MagicEngine {
             append(combinationSize)
         }
 
-        val selectedIndexes = linkedSetOf<Long>()
-        var counter = 0L
-        while (selectedIndexes.size < count) {
-            val digest = sha256("$seed|$counter")
-            val index = BigInteger(1, digest).mod(BigInteger.valueOf(total)).toLong()
-            selectedIndexes += index
-            counter++
-        }
+        return withContext(Dispatchers.Default) {
+            val selectedIndexes = linkedSetOf<Long>()
+            var counter = 0L
+            while (selectedIndexes.size < count) {
+                val digest = sha256("$seed|$counter")
+                val index = BigInteger(1, digest).mod(BigInteger.valueOf(total)).toLong()
+                selectedIndexes += index
+                counter++
+                if (counter % YIELD_EVERY == 0L) {
+                    coroutineContext.ensureActive()
+                    kotlinx.coroutines.yield()
+                }
+            }
 
-        return selectedIndexes.map { index ->
-            combinationAt(normalized, combinationSize, index)
+            selectedIndexes.map { index ->
+                coroutineContext.ensureActive()
+                combinationAt(normalized, combinationSize, index)
+            }
         }
     }
 
@@ -74,7 +94,8 @@ object MagicEngine {
         return result
     }
 
-    private fun combinationAt(numbers: List<Int>, k: Int, zeroBasedIndex: Long): List<Int> {
+    /** Visibilità `internal` (anziché `private`) solo per poterla coprire con unit test dedicati. */
+    internal fun combinationAt(numbers: List<Int>, k: Int, zeroBasedIndex: Long): List<Int> {
         val n = numbers.size
         var rank = zeroBasedIndex
         val positions = IntArray(k)

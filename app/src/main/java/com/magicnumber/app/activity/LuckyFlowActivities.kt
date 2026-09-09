@@ -7,7 +7,6 @@ import androidx.activity.compose.setContent
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -33,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import com.magicnumber.app.R
 import com.magicnumber.app.domain.magic.MagicEngine
 import com.magicnumber.app.ui.components.MagicButton
@@ -54,7 +55,6 @@ import com.magicnumber.app.ui.theme.MagicAmber
 import com.magicnumber.app.ui.theme.MagicCyan
 import com.magicnumber.app.ui.theme.MagicGold
 import com.magicnumber.app.ui.theme.MagicMuted
-import com.magicnumber.app.ui.theme.MagicNumberTheme
 import com.magicnumber.app.ui.theme.MagicPurple
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -63,6 +63,7 @@ import java.util.concurrent.Executor
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val EXTRA_SELECTED_NUMBERS = MagicIntentKeys.SELECTED_NUMBERS
 private val EXTRA_COMBINATION_SIZE = MagicIntentKeys.COMBINATION_SIZE
@@ -71,19 +72,6 @@ private val EXTRA_TOTAL_COMBINATIONS = MagicIntentKeys.TOTAL_COMBINATIONS
 private const val EXTRA_LUCKY_COMBINATIONS = "lucky_combinations"
 private const val EXTRA_MAGIC_DATE = "magic_date"
 
-private fun ComponentActivity.magicContentV2(content: @Composable () -> Unit) {
-    setContent {
-        val effectsEnabled = remember { com.magicnumber.app.domain.magic.SettingsPreferences.isEffectsEnabled(this) }
-        val animationsEnabled = remember { com.magicnumber.app.domain.magic.SettingsPreferences.isAnimationsEnabled(this) }
-        androidx.compose.runtime.CompositionLocalProvider(
-            com.magicnumber.app.ui.components.LocalEffectsEnabled provides effectsEnabled,
-            com.magicnumber.app.ui.components.LocalAnimationsEnabled provides animationsEnabled
-        ) {
-            MagicNumberTheme { content() }
-        }
-    }
-}
-
 class LuckyBiometricActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,11 +79,12 @@ class LuckyBiometricActivity : FragmentActivity() {
         val numbers = intent.getIntegerArrayListExtra(EXTRA_SELECTED_NUMBERS)?.distinct()?.sorted().orEmpty()
         val combinationSize = intent.getIntExtra(EXTRA_COMBINATION_SIZE, minOf(6, numbers.size.coerceAtLeast(1)))
         val luckyCount = intent.getIntExtra(EXTRA_LUCKY_COUNT, 4)
-        val total = intent.getLongExtra(EXTRA_TOTAL_COMBINATIONS, 0L)
         val today = LocalDate.now()
         val executor: Executor = mainExecutor
 
-        fun generateAndContinue() {
+        var status by mutableStateOf("Tocca l'impronta per continuare")
+
+        suspend fun generateAndContinue() {
             val combinations = MagicEngine.luckyCombinations(
                 context = this,
                 numbers = numbers,
@@ -111,13 +100,24 @@ class LuckyBiometricActivity : FragmentActivity() {
             })
         }
 
+        // Il calcolo (hashing ripetuto + ricostruzione combinatoria) gira su Dispatchers.Default
+        // dentro MagicEngine; qui lanciamo solo la coroutine sul lifecycleScope in modo che
+        // il thread UI resti libero e l'esito (successo/errore) aggiorni lo stato mostrato.
+        fun launchGeneration() {
+            status = "Generazione in corso…"
+            lifecycleScope.launch {
+                runCatching { generateAndContinue() }
+                    .onFailure { status = "Numeri non validi: torna indietro e riprova." }
+            }
+        }
+
         val biometricPrompt = BiometricPrompt(
             this,
             executor,
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    generateAndContinue()
+                    launchGeneration()
                 }
             }
         )
@@ -133,16 +133,14 @@ class LuckyBiometricActivity : FragmentActivity() {
         val biometricAvailable = BiometricManager.from(this)
             .canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
 
-        magicContentV2 {
-            var status by remember { mutableStateOf("Tocca l'impronta per continuare") }
-
+        magicContent {
             fun start() {
                 if (biometricAvailable) {
                     status = "Autenticazione in corso…"
                     biometricPrompt.authenticate(promptInfo)
                 } else {
                     status = "Biometria non disponibile: generazione locale"
-                    generateAndContinue()
+                    launchGeneration()
                 }
             }
 
@@ -174,7 +172,7 @@ class LuckyAnimationActivity : ComponentActivity() {
         val combinations = readCombinations(intent)
         val date = intent.getStringExtra(EXTRA_MAGIC_DATE) ?: LocalDate.now().toString()
 
-        magicContentV2 {
+        magicContent {
             var step by remember { mutableIntStateOf(0) }
             var revealReady by remember { mutableStateOf(false) }
             val animationsEnabled = com.magicnumber.app.ui.components.LocalAnimationsEnabled.current
@@ -234,7 +232,7 @@ class LuckyResultsActivity : ComponentActivity() {
         val date = runCatching { LocalDate.parse(intent.getStringExtra(EXTRA_MAGIC_DATE)) }.getOrElse { LocalDate.now() }
         val formatter = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.ITALIAN)
 
-        magicContentV2 {
+        magicContent {
             MagicPage(
                 "Le tue ${combinations.size} combinazioni fortunate",
                 date.format(formatter).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ITALIAN) else it.toString() },
@@ -247,7 +245,7 @@ class LuckyResultsActivity : ComponentActivity() {
 
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    var saved by remember { mutableStateOf(false) }
+                    var saved by rememberSaveable { mutableStateOf(false) }
                     MagicButton(if (saved) "SALVATA ✓" else "SALVA", secondary = true, modifier = Modifier.weight(1f)) {
                         if (!saved) {
                             com.magicnumber.app.domain.magic.SessionHistoryStore.save(this@LuckyResultsActivity, combinations.firstOrNull()?.size ?: 0, combinations)
@@ -300,20 +298,6 @@ private fun readCombinations(intent: Intent): List<List<Int>> =
 
 /** Decoy numbers shown while the magic is "in progress" — never the real result, so the reveal stays a surprise. */
 private fun randomDecoyNumbers(size: Int): List<Int> = (1..90).shuffled().take(size.coerceAtLeast(1))
-
-@Composable
-private fun MagicSummaryCard(label: String, value: String) {
-    MagicCard(accent = MagicPurple, contentPadding = 17.dp) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(label, color = MagicMuted)
-            Text(value, color = MagicGold, fontWeight = FontWeight.Bold)
-        }
-    }
-}
 
 @Composable
 private fun ProgressLineV2(symbol: String, label: String) {

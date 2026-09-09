@@ -7,6 +7,9 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.magicnumber.app.R
 
 /**
@@ -27,6 +30,7 @@ object MagicFeedback {
     private var idConfirm = 0
     private var idGenerateTick = 0
     private var idReveal = 0
+    private var releaseOnBackgroundRegistered = false
 
     private fun pool(context: Context): SoundPool {
         soundPool?.let { return it }
@@ -45,7 +49,29 @@ object MagicFeedback {
         idGenerateTick = pool.load(app, R.raw.sfx_generate_tick, 1)
         idReveal = pool.load(app, R.raw.sfx_reveal, 1)
         soundPool = pool
+        registerReleaseOnBackground()
         return pool
+    }
+
+    /**
+     * Il [SoundPool] è una risorsa nativa (decoder audio): la rilasciamo automaticamente quando
+     * l'intero processo va in background (nessuna Activity in foreground), evitando che resti
+     * allocata per tutta la vita del processo. Viene ricreata alla lazy on-demand (vedi [pool])
+     * la prima volta che serve di nuovo un suono.
+     */
+    private fun registerReleaseOnBackground() {
+        if (releaseOnBackgroundRegistered) return
+        releaseOnBackgroundRegistered = true
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) = release()
+        })
+    }
+
+    /** Rilascia il [SoundPool] nativo e i relativi campioni caricati. Sicuro da chiamare più volte. */
+    fun release() {
+        soundPool?.release()
+        soundPool = null
+        loadedSounds.clear()
     }
 
     /** Sound + vibration feedback for a normal tap (buttons, chips, steppers). */
