@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,7 +42,7 @@ import com.magicnumber.app.ui.theme.MagicSurface
 fun MagicPage(
     title: String,
     subtitle: String? = null,
-    content: @Composable Column.() -> Unit
+    content: @Composable ColumnScope.() -> Unit
 ) {
     val background = Brush.verticalGradient(
         listOf(MagicNight, Color(0xFF0D1024), Color(0xFF120B24))
