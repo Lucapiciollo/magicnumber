@@ -4,6 +4,11 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,8 +19,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,6 +46,8 @@ import com.magicnumber.app.ui.theme.MagicSurface
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.Executor
+import kotlinx.coroutines.delay
 
 private const val EXTRA_SELECTED_NUMBERS = "selected_numbers"
 private const val EXTRA_COMBINATION_SIZE = "combination_size"
@@ -55,13 +69,58 @@ class LuckyBiometricActivity : ComponentActivity() {
         val luckyCount = intent.getIntExtra(EXTRA_LUCKY_COUNT, 4)
         val total = intent.getLongExtra(EXTRA_TOTAL_COMBINATIONS, 0L)
         val today = LocalDate.now()
+        val executor: Executor = mainExecutor
+        var biometricMessage = "Appoggia il dito quando sei pronto"
+
+        fun generateAndContinue() {
+            val combinations = MagicEngine.luckyCombinations(
+                context = this,
+                numbers = numbers,
+                combinationSize = combinationSize,
+                requestedCount = luckyCount,
+                date = today
+            )
+            startActivity(Intent(this, LuckyAnimationActivity::class.java).apply {
+                putStringArrayListExtra(EXTRA_LUCKY_COMBINATIONS, ArrayList(combinations.map { it.joinToString(",") }))
+                putExtra(EXTRA_MAGIC_DATE, today.toString())
+                putExtra(EXTRA_COMBINATION_SIZE, combinationSize)
+                putExtra(EXTRA_LUCKY_COUNT, combinations.size)
+            })
+        }
+
+        val biometricPrompt = BiometricPrompt(
+            this,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    generateAndContinue()
+                }
+            }
+        )
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Attiva la magia")
+            .setSubtitle("Conferma l'estrazione fortunata di oggi")
+            .setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+            .build()
+
+        val biometricAvailable = BiometricManager.from(this).canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        ) == BiometricManager.BIOMETRIC_SUCCESS
 
         magicContentV2 {
+            var status by remember { mutableStateOf(biometricMessage) }
+
             MagicPage("Attiva la magia", "La tua richiesta è pronta per essere sigillata sul dispositivo") {
                 Text("◎", fontSize = 118.sp, color = Color(0xFF43D9FF))
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "L'impronta sarà il gesto di conferma. Il risultato viene calcolato con UUID, data e configurazione.",
+                    "L'impronta è il gesto di conferma. Nessun dato biometrico viene letto o salvato dall'app.",
                     color = MagicMuted,
                     textAlign = TextAlign.Center,
                     lineHeight = 21.sp
@@ -74,22 +133,18 @@ class LuckyBiometricActivity : ComponentActivity() {
                 MagicSummaryCard("Combinazioni fortunate", luckyCount.toString())
                 Spacer(Modifier.height(10.dp))
                 MagicSummaryCard("Universo possibile", total.toString())
-                Spacer(Modifier.height(26.dp))
+                Spacer(Modifier.height(22.dp))
+                Text(status, color = MagicMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(18.dp))
 
-                MagicButton("ATTIVA E GENERA") {
-                    val combinations = MagicEngine.luckyCombinations(
-                        context = this@LuckyBiometricActivity,
-                        numbers = numbers,
-                        combinationSize = combinationSize,
-                        requestedCount = luckyCount,
-                        date = today
-                    )
-                    startActivity(Intent(this@LuckyBiometricActivity, LuckyAnimationActivity::class.java).apply {
-                        putStringArrayListExtra(EXTRA_LUCKY_COMBINATIONS, ArrayList(combinations.map { it.joinToString(",") }))
-                        putExtra(EXTRA_MAGIC_DATE, today.toString())
-                        putExtra(EXTRA_COMBINATION_SIZE, combinationSize)
-                        putExtra(EXTRA_LUCKY_COUNT, combinations.size)
-                    })
+                MagicButton(if (biometricAvailable) "USA L'IMPRONTA" else "GENERA SENZA BIOMETRIA") {
+                    if (biometricAvailable) {
+                        status = "Autenticazione in corso…"
+                        biometricPrompt.authenticate(promptInfo)
+                    } else {
+                        status = "Biometria non disponibile: generazione locale"
+                        generateAndContinue()
+                    }
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
@@ -111,27 +166,55 @@ class LuckyAnimationActivity : ComponentActivity() {
         val date = intent.getStringExtra(EXTRA_MAGIC_DATE) ?: LocalDate.now().toString()
 
         magicContentV2 {
+            var step by remember { mutableIntStateOf(0) }
+            var revealReady by remember { mutableStateOf(false) }
+            val progress by animateFloatAsState(
+                targetValue = step / 4f,
+                animationSpec = tween(500),
+                label = "magic-progress"
+            )
+
+            LaunchedEffect(Unit) {
+                delay(450); step = 1
+                delay(600); step = 2
+                delay(650); step = 3
+                delay(700); step = 4
+                delay(450); revealReady = true
+            }
+
             MagicPage("La magia è in corso…", "Il tuo universo numerico sta prendendo forma") {
                 Text("✦", fontSize = 112.sp, color = MagicGold)
+                Spacer(Modifier.height(12.dp))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MagicGold
+                )
                 Spacer(Modifier.height(18.dp))
-                ProgressLineV2("✓", "Identità installazione")
-                ProgressLineV2("✓", "Data del giorno")
-                ProgressLineV2("✓", "Calcolo universo combinatorio")
-                ProgressLineV2("✓", "Selezione deterministica")
+                ProgressLineV2(if (step >= 1) "✓" else "○", "Identità installazione")
+                ProgressLineV2(if (step >= 2) "✓" else "○", "Data del giorno")
+                ProgressLineV2(if (step >= 3) "✓" else "○", "Calcolo universo combinatorio")
+                ProgressLineV2(if (step >= 4) "✓" else "○", "Selezione deterministica")
                 Spacer(Modifier.height(20.dp))
 
-                if (combinations.isNotEmpty()) {
-                    Text("ANTEPRIMA ENERGIA", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
-                    Spacer(Modifier.height(12.dp))
-                    NumberStrip(combinations.first())
+                AnimatedVisibility(visible = step >= 3 && combinations.isNotEmpty()) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("ENERGIA NUMERICA", color = MagicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+                        Spacer(Modifier.height(12.dp))
+                        NumberStrip(combinations.first())
+                    }
                 }
 
                 Spacer(Modifier.height(28.dp))
-                MagicButton("RIVELA LE COMBINAZIONI") {
-                    startActivity(Intent(this@LuckyAnimationActivity, LuckyResultsActivity::class.java).apply {
-                        putStringArrayListExtra(EXTRA_LUCKY_COMBINATIONS, intent.getStringArrayListExtra(EXTRA_LUCKY_COMBINATIONS))
-                        putExtra(EXTRA_MAGIC_DATE, date)
-                    })
+                if (revealReady) {
+                    MagicButton("RIVELA LE COMBINAZIONI") {
+                        startActivity(Intent(this@LuckyAnimationActivity, LuckyResultsActivity::class.java).apply {
+                            putStringArrayListExtra(EXTRA_LUCKY_COMBINATIONS, intent.getStringArrayListExtra(EXTRA_LUCKY_COMBINATIONS))
+                            putExtra(EXTRA_MAGIC_DATE, date)
+                        })
+                    }
+                } else {
+                    Text("Quasi pronto…", color = MagicMuted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
