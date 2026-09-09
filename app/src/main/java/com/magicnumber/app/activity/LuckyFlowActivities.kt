@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
 import com.magicnumber.app.domain.magic.MagicEngine
 import com.magicnumber.app.ui.components.MagicButton
 import com.magicnumber.app.ui.components.MagicPage
@@ -60,7 +61,7 @@ private fun ComponentActivity.magicContentV2(content: @Composable () -> Unit) {
     setContent { MagicNumberTheme { content() } }
 }
 
-class LuckyBiometricActivity : ComponentActivity() {
+class LuckyBiometricActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -70,7 +71,6 @@ class LuckyBiometricActivity : ComponentActivity() {
         val total = intent.getLongExtra(EXTRA_TOTAL_COMBINATIONS, 0L)
         val today = LocalDate.now()
         val executor: Executor = mainExecutor
-        var biometricMessage = "Appoggia il dito quando sei pronto"
 
         fun generateAndContinue() {
             val combinations = MagicEngine.luckyCombinations(
@@ -99,22 +99,19 @@ class LuckyBiometricActivity : ComponentActivity() {
             }
         )
 
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Attiva la magia")
             .setSubtitle("Conferma l'estrazione fortunata di oggi")
-            .setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
-            )
+            .setAllowedAuthenticators(authenticators)
+            .setNegativeButtonText("Annulla")
             .build()
 
-        val biometricAvailable = BiometricManager.from(this).canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        ) == BiometricManager.BIOMETRIC_SUCCESS
+        val biometricAvailable = BiometricManager.from(this)
+            .canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
 
         magicContentV2 {
-            var status by remember { mutableStateOf(biometricMessage) }
+            var status by remember { mutableStateOf("Appoggia il dito quando sei pronto") }
 
             MagicPage("Attiva la magia", "La tua richiesta è pronta per essere sigillata sul dispositivo") {
                 Text("◎", fontSize = 118.sp, color = Color(0xFF43D9FF))
